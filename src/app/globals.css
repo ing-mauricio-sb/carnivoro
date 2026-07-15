@@ -1,0 +1,179 @@
+@import url('https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800;900&family=Space+Grotesk:wght@400;500;700&display=swap');
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   Design system — Dark "Carne & Brasa"
+   Every color used anywhere in the app must be one of these tokens.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-bg: #0c0a09; /* charcoal stage / page background */
+  --color-surface: #17120f; /* warm coal — cards, panels */
+  --color-surface2: #231a15; /* raised coal — hover, borders */
+  --color-meat: #c0271f; /* primary brand red (beef) */
+  --color-sear: #7a1410; /* dark seared red — depth */
+  --color-ember: #ff6a1a; /* incandescent grill orange — accent, CTAs, glow */
+  --color-cheese: #f2a83b; /* warm gold highlight (sparingly) */
+  --color-bone: #f6f1e7; /* primary text / cream on dark */
+  --color-ash: #9a8e83; /* secondary/muted warm gray text */
+
+  --font-display: 'Big Shoulders Display', system-ui, sans-serif;
+  --font-body: 'Space Grotesk', system-ui, sans-serif;
+}
+
+/* ---------------------------------------------------------------------------
+   Base
+--------------------------------------------------------------------------- */
+:root {
+  color-scheme: dark;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-bone);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--color-ember);
+  color: var(--color-bg);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--color-bg),
+    0 0 0 4px var(--color-ember);
+  border-radius: 4px;
+}
+
+/* Lenis smooth-scroll recommended styles */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------------------------
+   Typographic scale (fluid)
+--------------------------------------------------------------------------- */
+.text-hero {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(4rem, 17vw, 19rem);
+  line-height: 0.86;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.text-section {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(2.5rem, 7vw, 6rem);
+  line-height: 0.92;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.text-lead {
+  font-size: clamp(1.05rem, 2.2vw, 1.5rem);
+  font-weight: 500;
+  line-height: 1.4;
+}
+.eyebrow {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--color-ember);
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+section[id] {
+  scroll-margin-top: 84px;
+}
+
+/* ---------------------------------------------------------------------------
+   Animations
+--------------------------------------------------------------------------- */
+@keyframes heroReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(28px);
+    filter: blur(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes softBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Entrance reveal — toggled by the <Reveal> component adding .is-in */
+.reveal {
+  opacity: 0;
+  will-change: transform, filter, opacity;
+}
+.reveal.is-in {
+  animation: heroReveal 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.scroll-cue {
+  animation: softBob 1.8s ease-in-out infinite;
+}
+
+.marquee-track {
+  animation: marquee 22s linear infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Reduced motion — show everything, kill non-essential motion
+--------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
