@@ -1,7 +1,7 @@
 'use client';
 
-import { Suspense } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Suspense, useEffect } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
 import { Preload, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
 import Burger from './Burger';
@@ -9,22 +9,47 @@ import Lighting from './Lighting';
 import Effects from './Effects';
 import Smoke from './Smoke';
 import { useIsMobile, usePrefersReducedMotion } from '@/lib/useMediaQuery';
+import { useUI } from '@/lib/scroll';
+
+/**
+ * Pauses the render loop while the fixed canvas is fully hidden behind the
+ * solid sections (Menu → Footer), so the GPU stops paying for an invisible
+ * scene. `covered` flips only at the exact 100%-covered boundary (see the
+ * coverGate ScrollTrigger), so freezing/unfreezing is never visible.
+ */
+function FrameloopGate() {
+  const covered = useUI((s) => s.covered);
+  const setFrameloop = useThree((s) => s.setFrameloop);
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    setFrameloop(covered ? 'never' : 'always');
+    if (!covered) invalidate();
+  }, [covered, setFrameloop, invalidate]);
+  return null;
+}
 
 export default function Burger3D() {
-  const mobile = useIsMobile();
-  const reduced = usePrefersReducedMotion();
+  // Sync init is safe here: this component only mounts client-side (ssr:false),
+  // so the very first render — the one that creates the GL context — already
+  // sees the real device values instead of a desktop-defaults first frame.
+  const mobile = useIsMobile(true);
+  const reduced = usePrefersReducedMotion(true);
 
   return (
     <Canvas
       shadows={{ type: THREE.PCFShadowMap }}
       dpr={[1, mobile ? 1.5 : 2]}
       camera={{ fov: 35, position: [0, 0.35, 7] }}
-      gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+      // With the EffectComposer active the scene is rasterised into its own
+      // render targets (SMAA does the AA); default-framebuffer MSAA only costs
+      // memory. Reduced-motion skips the composer, so only then keep MSAA on.
+      gl={{ antialias: reduced, alpha: true, powerPreference: 'high-performance' }}
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         gl.toneMappingExposure = 1.05;
       }}
     >
+      <FrameloopGate />
       <Suspense fallback={null}>
         <Lighting mobile={mobile} />
         <Burger

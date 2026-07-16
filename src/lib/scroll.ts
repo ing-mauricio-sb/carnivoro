@@ -17,6 +17,10 @@ interface UIState {
   setNavOpen: (v: boolean) => void;
   ready: boolean; // 3D scene has rendered its first frame
   setReady: (v: boolean) => void;
+  covered: boolean; // fixed canvas fully hidden behind the solid sections
+  setCovered: (v: boolean) => void;
+  effectsReady: boolean; // post-processing chunk mounted (or intentionally skipped)
+  setEffectsReady: (v: boolean) => void;
 }
 
 export const useUI = create<UIState>((set) => ({
@@ -24,4 +28,8 @@ export const useUI = create<UIState>((set) => ({
   setNavOpen: (v) => set({ navOpen: v }),
   ready: false,
   setReady: (v) => set({ ready: v }),
+  covered: false,
+  setCovered: (v) => set({ covered: v }),
+  effectsReady: false,
+  setEffectsReady: (v) => set({ effectsReady: v }),
 }));

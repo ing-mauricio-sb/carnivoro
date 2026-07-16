@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import Lenis from 'lenis';
 import gsap from 'gsap';
 import ScrollTrigger from 'gsap/ScrollTrigger';
-import { scroll } from './scroll';
+import { scroll, useUI } from './scroll';
 
 let registered = false;
 
@@ -47,6 +47,19 @@ export function useCinematicScroll(
       },
     });
 
+    // Tracks the span where the solid sections slide up over the fixed canvas:
+    // at 'bottom top' the wrapper's bottom crosses the viewport top, i.e. the
+    // canvas is 100% covered — only then may the 3D frameloop pause.
+    const coverGate = ScrollTrigger.create({
+      trigger: wrapperRef.current ?? undefined,
+      start: 'bottom bottom',
+      end: 'bottom top',
+      onLeave: () => useUI.getState().setCovered(true),
+      onEnterBack: () => useUI.getState().setCovered(false),
+      // covers load-with-scroll-restored / deep links past the stage
+      onRefresh: (self) => useUI.getState().setCovered(self.progress >= 1),
+    });
+
     // Make sure positions are correct once fonts/layout settle.
     const refresh = () => ScrollTrigger.refresh();
     const raf = requestAnimationFrame(refresh);
@@ -54,6 +67,7 @@ export function useCinematicScroll(
     return () => {
       cancelAnimationFrame(raf);
       master.kill();
+      coverGate.kill();
       if (lenis) {
         gsap.ticker.remove(tickerFn);
         lenis.destroy();
