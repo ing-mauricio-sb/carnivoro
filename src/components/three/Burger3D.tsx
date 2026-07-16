@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Component, Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { PerformanceMonitor, Preload, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
@@ -23,13 +23,48 @@ import { useUI } from '@/lib/scroll';
  */
 function FrameloopGate() {
   const covered = useUI((s) => s.covered);
+  const ready = useUI((s) => s.ready);
   const setFrameloop = useThree((s) => s.setFrameloop);
   const invalidate = useThree((s) => s.invalidate);
+  const clock = useThree((s) => s.clock);
+  const savedTime = useRef(0);
+  const frozen = useRef(false);
   useEffect(() => {
-    setFrameloop(covered ? 'never' : 'always');
-    if (!covered) invalidate();
-  }, [covered, setFrameloop, invalidate]);
+    // Never freeze before the first frame flagged `ready`, or a deep-link boot
+    // could pause the loop before setReady ever runs (Loader would stall).
+    if (covered && ready && !frozen.current) {
+      frozen.current = true;
+      // setFrameloop resets clock.elapsedTime to 0 in BOTH directions; the
+      // time-based bits (smoke, sparkles) would snap right as the canvas
+      // re-emerges. Save/restore the clock across the freeze.
+      savedTime.current = clock.elapsedTime;
+      setFrameloop('never');
+    } else if (!covered && frozen.current) {
+      frozen.current = false;
+      setFrameloop('always');
+      clock.elapsedTime = savedTime.current;
+      invalidate();
+    }
+  }, [covered, ready, setFrameloop, invalidate, clock]);
   return null;
+}
+
+/**
+ * The postprocessing chunk is a cosmetic enhancement; if it fails to load
+ * (flaky network, stale deploy cache) degrade to the raw render instead of
+ * letting the error replace the whole page — and unblock the Loader.
+ */
+class EffectsBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch() {
+    useUI.getState().setEffectsReady(true);
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
 }
 
 export default function Burger3D() {
@@ -70,6 +105,8 @@ export default function Burger3D() {
           flipflops={2}
           onDecline={() => setDprCap((d) => Math.max(1, d - 0.25))}
           onIncline={() => setDprCap((d) => Math.min(2, d + 0.25))}
+          // settle above the 1.0 hard floor: on oscillating hardware a mild
+          // permanent cap beats repeated visible sharpness jumps
           onFallback={() => setDprCap(1.25)}
         />
       )}
@@ -103,9 +140,11 @@ export default function Burger3D() {
       {/* Own boundary: sharing the scene's Suspense would let the chunk fetch
           defer (or retry) the already-booted scene siblings. */}
       {!reduced && (
-        <Suspense fallback={null}>
-          <Effects mobile={mobile} />
-        </Suspense>
+        <EffectsBoundary>
+          <Suspense fallback={null}>
+            <Effects mobile={mobile} />
+          </Suspense>
+        </EffectsBoundary>
       )}
     </Canvas>
   );
