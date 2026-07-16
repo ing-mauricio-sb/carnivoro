@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800;900&family=Space+Grotesk:wght@400;500;700&display=swap');
 @import 'tailwindcss';
 
 /* ---------------------------------------------------------------------------
@@ -16,8 +15,10 @@
   --color-bone: #f6f1e7; /* primary text / cream on dark */
   --color-ash: #9a8e83; /* secondary/muted warm gray text */
 
-  --font-display: 'Big Shoulders Display', system-ui, sans-serif;
-  --font-body: 'Space Grotesk', system-ui, sans-serif;
+  /* Families come from next/font in layout.tsx (self-hosted, no render-blocking
+     Google round-trips). The vars land on <html>, i.e. :root. */
+  --font-display: var(--font-bsd), system-ui, sans-serif;
+  --font-body: var(--font-sg), system-ui, sans-serif;
 }
 
 /* ---------------------------------------------------------------------------
