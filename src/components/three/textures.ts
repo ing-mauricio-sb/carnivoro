@@ -62,7 +62,17 @@ export function makeNormalTexture({
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d')!;
   const img = ctx.createImageData(size, size);
-  const h = (x: number, y: number) => fbm((x / size) * scale, (y / size) * scale, octaves);
+  // Height field precomputed once over [-1..size]² so the four neighbour taps
+  // below read from memory instead of re-evaluating fbm 4× per pixel.
+  // Float64 keeps the output bit-identical to the direct evaluation.
+  const stride = size + 2;
+  const heights = new Float64Array(stride * stride);
+  for (let hy = -1; hy <= size; hy++) {
+    for (let hx = -1; hx <= size; hx++) {
+      heights[(hy + 1) * stride + (hx + 1)] = fbm((hx / size) * scale, (hy / size) * scale, octaves);
+    }
+  }
+  const h = (x: number, y: number) => heights[(y + 1) * stride + (x + 1)];
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const hl = h(x - 1, y);
