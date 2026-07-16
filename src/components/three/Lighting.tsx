@@ -55,7 +55,7 @@ export default function Lighting({ mobile = false }: { mobile?: boolean }) {
         blur={3.2}
         opacity={0.5}
         far={5}
-        resolution={mobile ? 512 : 1024}
+        resolution={512}
         color="#000000"
       />
     </>
