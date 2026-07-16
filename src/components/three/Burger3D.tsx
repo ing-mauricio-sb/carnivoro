@@ -1,13 +1,17 @@
 'use client';
 
-import { Suspense, useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { Preload, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
 import Burger from './Burger';
 import Lighting from './Lighting';
-import Effects from './Effects';
 import Smoke from './Smoke';
+
+// Splits postprocessing + n8ao into their own chunk so the burger's first
+// frame doesn't wait for them; the composer mounts when the chunk lands and
+// the Loader (which waits for effectsReady) hides the transition.
+const Effects = lazy(() => import('./Effects'));
 import { useIsMobile, usePrefersReducedMotion } from '@/lib/useMediaQuery';
 import { useUI } from '@/lib/scroll';
 
@@ -34,6 +38,11 @@ export default function Burger3D() {
   // sees the real device values instead of a desktop-defaults first frame.
   const mobile = useIsMobile(true);
   const reduced = usePrefersReducedMotion(true);
+
+  // No composer under reduced motion — unblock the Loader immediately.
+  useEffect(() => {
+    if (reduced) useUI.getState().setEffectsReady(true);
+  }, [reduced]);
 
   return (
     <Canvas
@@ -77,7 +86,13 @@ export default function Burger3D() {
         )}
         <Preload all />
       </Suspense>
-      {!reduced && <Effects mobile={mobile} />}
+      {/* Own boundary: sharing the scene's Suspense would let the chunk fetch
+          defer (or retry) the already-booted scene siblings. */}
+      {!reduced && (
+        <Suspense fallback={null}>
+          <Effects mobile={mobile} />
+        </Suspense>
+      )}
     </Canvas>
   );
 }

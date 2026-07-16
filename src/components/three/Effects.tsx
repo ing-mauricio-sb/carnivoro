@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import {
   EffectComposer,
   N8AO,
@@ -10,12 +11,19 @@ import {
   SMAA,
 } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
+import { useUI } from '@/lib/scroll';
 
 /**
  * Cinematic post stack. AO deepens the contacts between the burger layers
  * (reads as solid), Bloom gives the grill-ember glow, DoF adds depth on desktop.
  */
 export default function Effects({ mobile = false }: { mobile?: boolean }) {
+  // Signals the Loader that the lazy postprocessing chunk is live, so it never
+  // reveals the scene mid-transition from raw render to composed render.
+  useEffect(() => {
+    useUI.getState().setEffectsReady(true);
+  }, []);
+
   if (mobile) {
     return (
       <EffectComposer multisampling={0}>

@@ -10,6 +10,7 @@ import { useUI } from '@/lib/scroll';
  */
 export default function Loader() {
   const ready = useUI((s) => s.ready);
+  const effectsReady = useUI((s) => s.effectsReady);
   const [pct, setPct] = useState(4);
   const [gone, setGone] = useState(false);
   const done = useRef(false);
@@ -30,10 +31,10 @@ export default function Loader() {
       setPct(100);
       setTimeout(() => setGone(true), 650);
     };
-    if (ready) finish();
+    if (ready && effectsReady) finish();
     const safety = setTimeout(finish, 8000);
     return () => clearTimeout(safety);
-  }, [ready]);
+  }, [ready, effectsReady]);
 
   if (gone) return null;
 
