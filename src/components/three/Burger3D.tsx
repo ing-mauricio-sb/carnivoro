@@ -1,8 +1,8 @@
 'use client';
 
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { Preload, Sparkles } from '@react-three/drei';
+import { PerformanceMonitor, Preload, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
 import Burger from './Burger';
 import Lighting from './Lighting';
@@ -38,6 +38,10 @@ export default function Burger3D() {
   // sees the real device values instead of a desktop-defaults first frame.
   const mobile = useIsMobile(true);
   const reduced = usePrefersReducedMotion(true);
+  const covered = useUI((s) => s.covered);
+  // Adaptive quality floor: full sharpness by default, steps down only under
+  // sustained fps decline (user-approved trade: fluidity over DPR when weak).
+  const [dprCap, setDprCap] = useState(2);
 
   // No composer under reduced motion — unblock the Loader immediately.
   useEffect(() => {
@@ -47,7 +51,7 @@ export default function Burger3D() {
   return (
     <Canvas
       shadows={{ type: THREE.PCFShadowMap }}
-      dpr={[1, mobile ? 1.5 : 2]}
+      dpr={[1, Math.min(dprCap, mobile ? 1.5 : 2)]}
       camera={{ fov: 35, position: [0, 0.35, 7] }}
       // With the EffectComposer active the scene is rasterised into its own
       // render targets (SMAA does the AA); default-framebuffer MSAA only costs
@@ -59,6 +63,16 @@ export default function Burger3D() {
       }}
     >
       <FrameloopGate />
+      {/* Unmounted while frozen: a paused loop would otherwise feed it
+          poisoned ~0fps samples on resume. */}
+      {!covered && (
+        <PerformanceMonitor
+          flipflops={2}
+          onDecline={() => setDprCap((d) => Math.max(1, d - 0.25))}
+          onIncline={() => setDprCap((d) => Math.min(2, d + 0.25))}
+          onFallback={() => setDprCap(1.25)}
+        />
+      )}
       <Suspense fallback={null}>
         <Lighting mobile={mobile} />
         <Burger

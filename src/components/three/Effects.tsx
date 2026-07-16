@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useContext, useEffect } from 'react';
+import { useThree } from '@react-three/fiber';
 import {
   EffectComposer,
+  EffectComposerContext,
   N8AO,
   Bloom,
   DepthOfField,
@@ -12,6 +14,21 @@ import {
 } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
 import { useUI } from '@/lib/scroll';
+
+/**
+ * The composer re-runs setSize only when the CSS size changes; a runtime DPR
+ * change (adaptive PerformanceMonitor) resizes the renderer but would leave
+ * every pass at the old buffer size. Re-sync whenever dpr moves.
+ */
+function DprSync() {
+  const { composer } = useContext(EffectComposerContext);
+  const size = useThree((s) => s.size);
+  const dpr = useThree((s) => s.viewport.dpr);
+  useEffect(() => {
+    composer.setSize(size.width, size.height);
+  }, [composer, size, dpr]);
+  return null;
+}
 
 /**
  * Cinematic post stack. AO deepens the contacts between the burger layers
@@ -27,7 +44,8 @@ export default function Effects({ mobile = false }: { mobile?: boolean }) {
   if (mobile) {
     return (
       <EffectComposer multisampling={0}>
-        <N8AO aoRadius={0.5} intensity={1.2} distanceFalloff={1} quality="low" />
+        <DprSync />
+        <N8AO aoRadius={0.5} intensity={1.2} distanceFalloff={1} quality="low" halfRes />
         <Bloom luminanceThreshold={0.85} luminanceSmoothing={0.9} intensity={0.35} mipmapBlur />
         <Vignette eskil={false} offset={0.28} darkness={0.6} />
         <SMAA />
@@ -37,7 +55,8 @@ export default function Effects({ mobile = false }: { mobile?: boolean }) {
 
   return (
     <EffectComposer multisampling={0}>
-      <N8AO aoRadius={0.8} intensity={1.8} distanceFalloff={1} quality="medium" />
+      <DprSync />
+      <N8AO aoRadius={0.8} intensity={1.8} distanceFalloff={1} quality="medium" halfRes />
       <Bloom luminanceThreshold={0.85} luminanceSmoothing={0.9} intensity={0.38} mipmapBlur />
       <DepthOfField focusDistance={0.012} focalLength={0.05} bokehScale={2.2} />
       <Vignette eskil={false} offset={0.28} darkness={0.62} />
