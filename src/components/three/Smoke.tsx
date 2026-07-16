@@ -62,10 +62,12 @@ export default function Smoke({
     const group = groupRef.current;
     if (!group || frozen) return;
     const t = state.clock.elapsedTime;
-    for (let i = 0; i < meshes.current.length; i++) {
+    // bound by puffs: when `count` shrinks (breakpoint crossed on resize),
+    // meshes.current still holds stale trailing refs for one frame
+    for (let i = 0; i < puffs.length; i++) {
       const m = meshes.current[i];
       const p = puffs[i];
-      if (!m) continue;
+      if (!m || !p) continue;
       const life = (t * p.speed + p.phase) % 1;
       const y = origin[1] + life * 3.4;
       const x = origin[0] + p.x + Math.sin(life * 3 + p.phase * 6) * p.drift;
