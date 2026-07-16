@@ -25,6 +25,15 @@ export default function Reveal({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // release will-change once the entrance finished (see .is-done in CSS)
+    const onEnd = (e: Event) => {
+      const ae = e as AnimationEvent;
+      if (ae.target === el && ae.animationName === 'heroReveal') {
+        el.classList.add('is-done');
+        el.removeEventListener('animationend', onEnd);
+      }
+    };
+    el.addEventListener('animationend', onEnd);
     const io = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -37,7 +46,10 @@ export default function Reveal({
       { threshold: 0.15 },
     );
     io.observe(el);
-    return () => io.disconnect();
+    return () => {
+      io.disconnect();
+      el.removeEventListener('animationend', onEnd);
+    };
   }, []);
 
   return createElement(

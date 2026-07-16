@@ -144,13 +144,18 @@ section[id] {
   }
 }
 
-/* Entrance reveal — toggled by the <Reveal> component adding .is-in */
+/* Entrance reveal — toggled by the <Reveal> component adding .is-in.
+   will-change lives only while the animation runs (.is-in → .is-done),
+   so cards don't hold a GPU layer each forever. */
 .reveal {
   opacity: 0;
-  will-change: transform, filter, opacity;
 }
 .reveal.is-in {
   animation: heroReveal 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, filter, opacity;
+}
+.reveal.is-done {
+  will-change: auto;
 }
 
 .scroll-cue {
@@ -159,6 +164,9 @@ section[id] {
 
 .marquee-track {
   animation: marquee 22s linear infinite;
+}
+.marquee-idle .marquee-track {
+  animation-play-state: paused;
 }
 
 /* ---------------------------------------------------------------------------

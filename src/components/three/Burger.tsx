@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -64,6 +64,11 @@ export default function Burger({
   const readySet = useRef(false);
   const sesameRef = useRef<THREE.InstancedMesh>(null);
   const greaseRef = useRef<THREE.InstancedMesh>(null);
+  // Tooltips only exist visually inside the despiece window (fade 0.42–0.64).
+  // Mounting the <Html> nodes just around it stops drei from projecting and
+  // writing 6 DOM transforms per frame during the entire rest of the scroll.
+  const [tipsActive, setTipsActive] = useState(false);
+  const tipsActiveRef = useRef(false);
 
   const geoms = useMemo(
     () => ({
@@ -157,6 +162,14 @@ export default function Burger({
     const dt = Math.min(dtRaw, 1 / 30); // stabilise damp on frame drops
     const t = state.clock.elapsedTime;
     const p = motionScale === 0 ? snapProgress(scroll.progress) : scroll.progress;
+
+    if (tooltips) {
+      const inWindow = p >= 0.38 && p <= 0.66;
+      if (inWindow !== tipsActiveRef.current) {
+        tipsActiveRef.current = inWindow;
+        setTipsActive(inWindow);
+      }
+    }
 
     const vp = subProgress(p, 0.2, 0.4);
     const dp = subProgress(p, 0.4, 0.65);
@@ -267,7 +280,7 @@ export default function Burger({
               />
             </>
           )}
-          {tooltips && (
+          {tooltips && tipsActive && (
             <Html
               position={[def.side * 2.2, 0, 0.15]}
               center

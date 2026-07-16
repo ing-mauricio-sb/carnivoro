@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
-import { scroll } from '@/lib/scroll';
+import { subscribeProgress } from '@/lib/progressBus';
 import { clamp, smoothstep } from '@/lib/math';
 import Hero from './Hero';
 import Valor from './Valor';
@@ -27,26 +27,24 @@ function PhaseLayer({
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      const el = ref.current;
-      if (el) {
-        const p = scroll.progress;
-        let o = 0;
-        if (p >= start && p <= end) {
-          // first layer stays full at p=0; last layer stays full at p>=1
-          const inn = start <= 0 ? 1 : smoothstep(clamp((p - start) / fade));
-          const out = end >= 1 ? 1 : 1 - smoothstep(clamp((p - (end - fade)) / fade));
-          o = inn * out;
-        }
-        el.style.opacity = String(o);
-        el.style.transform = `translateY(${(1 - o) * 22}px)`;
-        el.style.visibility = o <= 0.01 ? 'hidden' : 'visible';
+    const el = ref.current;
+    if (!el) return;
+    let lastO = -1;
+    return subscribeProgress((p) => {
+      let o = 0;
+      if (p >= start && p <= end) {
+        // first layer stays full at p=0; last layer stays full at p>=1
+        const inn = start <= 0 ? 1 : smoothstep(clamp((p - start) / fade));
+        const out = end >= 1 ? 1 : 1 - smoothstep(clamp((p - (end - fade)) / fade));
+        o = inn * out;
       }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+      // out-of-range layers keep o = 0 while p changes — skip the DOM writes
+      if (o === lastO) return;
+      lastO = o;
+      el.style.opacity = String(o);
+      el.style.transform = `translateY(${(1 - o) * 22}px)`;
+      el.style.visibility = o <= 0.01 ? 'hidden' : 'visible';
+    });
   }, [start, end, fade]);
 
   return (

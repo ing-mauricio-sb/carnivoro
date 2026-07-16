@@ -1,11 +1,27 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import Reveal from '@/components/ui/Reveal';
 import CtaButton from '@/components/ui/CtaButton';
 
 export default function Reto() {
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // The 14vw marquee is an infinite composited animation; pause it while the
+  // section is off-screen so it never competes with scroll elsewhere.
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([entry]) => {
+      el.classList.toggle('marquee-idle', !entry.isIntersecting);
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   return (
     <section
+      ref={sectionRef}
       id="reto"
       className="relative overflow-hidden border-y border-surface2"
       style={{ background: 'linear-gradient(180deg, #7a1410 0%, #0c0a09 100%)' }}

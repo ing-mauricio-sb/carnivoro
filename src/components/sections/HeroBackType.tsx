@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { scroll } from '@/lib/scroll';
+import { subscribeProgress } from '@/lib/progressBus';
 import { clamp } from '@/lib/math';
 
 /**
@@ -13,19 +13,19 @@ export default function HeroBackType() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      const el = ref.current;
-      if (el) {
-        // fully visible in the hero, gone by ~18% scroll
-        const o = 1 - clamp(scroll.progress / 0.18);
-        el.style.opacity = String(o);
-        el.style.transform = `translateY(${scroll.progress * -60}px)`;
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    const el = ref.current;
+    if (!el) return;
+    let wasVisible = true;
+    return subscribeProgress((p) => {
+      // fully visible in the hero, gone by ~18% scroll
+      const o = 1 - clamp(p / 0.18);
+      const visible = o > 0;
+      // once faded out, skip writes while p keeps changing further down
+      if (!visible && !wasVisible) return;
+      wasVisible = visible;
+      el.style.opacity = String(o);
+      el.style.transform = `translateY(${p * -60}px)`;
+    });
   }, []);
 
   return (
