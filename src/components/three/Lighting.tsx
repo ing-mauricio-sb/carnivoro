@@ -1,17 +1,50 @@
 'use client';
 
+import { useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { Environment, Lightformer, ContactShadows } from '@react-three/drei';
+import * as THREE from 'three';
+
+/**
+ * Warm ember glow from below-front — sells the grill. The flicker is a slow
+ * two-sine wobble, subtle enough to read as firelight, not as a strobe.
+ * Static intensity when reduced motion is preferred.
+ */
+function EmberLight({ flicker }: { flicker: boolean }) {
+  const ref = useRef<THREE.PointLight>(null);
+  useFrame((state) => {
+    const l = ref.current;
+    if (!l || !flicker) return;
+    const t = state.clock.elapsedTime;
+    l.intensity = 0.55 + Math.sin(t * 7.3) * 0.045 + Math.sin(t * 13.7) * 0.025;
+  });
+  return (
+    <pointLight
+      ref={ref}
+      color="#ff6a1a"
+      position={[0.5, -1.1, 2.2]}
+      intensity={0.55}
+      decay={0}
+    />
+  );
+}
 
 /**
  * Cinematic warm lighting. The environment is built procedurally from
  * Lightformers (no external HDRI → self-contained, no network/CORS), giving the
  * cheese/bun/tomato believable reflections. Real lights add the cast shadows.
  */
-export default function Lighting({ mobile = false }: { mobile?: boolean }) {
+export default function Lighting({
+  mobile = false,
+  reduced = false,
+}: {
+  mobile?: boolean;
+  reduced?: boolean;
+}) {
   return (
     <>
       {/* Procedural studio env map for reflections */}
-      <Environment resolution={mobile ? 128 : 256} frames={1}>
+      <Environment resolution={mobile ? 128 : 512} frames={1}>
         {/* warm-white key (soft, neutral so the bun reads golden not neon) */}
         <Lightformer intensity={2.2} color="#fff0dc" position={[3, 4, 4]} scale={[7, 7, 1]} />
         {/* warm side bounce */}
@@ -37,7 +70,7 @@ export default function Lighting({ mobile = false }: { mobile?: boolean }) {
         position={[4.5, 6.5, 5]}
         angle={0.6}
         penumbra={0.9}
-        intensity={mobile ? 3 : 3.6}
+        intensity={mobile ? 3 : 4}
         decay={0}
         castShadow
         shadow-mapSize-width={mobile ? 1024 : 2048}
@@ -46,16 +79,20 @@ export default function Lighting({ mobile = false }: { mobile?: boolean }) {
       />
       {/* Rim — deep red from behind */}
       <directionalLight color="#c0271f" position={[-4, 2, -5]} intensity={0.7} />
+      {/* Cool kicker from high back-left — crisp edge separation from the stage */}
+      <directionalLight color="#8a97ad" position={[-3, 5, -4]} intensity={0.35} />
       {/* Soft frontal fill so the front faces don't go black */}
       <directionalLight color="#ffe6c8" position={[0, 1.5, 6]} intensity={0.4} />
+      {/* Ember underglow (desktop only — one extra light is real cost on mobile GPUs) */}
+      {!mobile && <EmberLight flicker={!reduced} />}
 
       <ContactShadows
         position={[0, -1.55, 0]}
         scale={11}
-        blur={3.2}
-        opacity={0.5}
+        blur={mobile ? 3.2 : 2.8}
+        opacity={mobile ? 0.5 : 0.62}
         far={5}
-        resolution={512}
+        resolution={mobile ? 512 : 1024}
         color="#000000"
       />
     </>

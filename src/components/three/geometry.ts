@@ -90,7 +90,7 @@ function vnoise(x: number, y: number): number {
 
 /** Beef patty — thick cylinder with an irregular, grill-seared rim + charred top relief. */
 export function makePatty(): THREE.CylinderGeometry {
-  const g = new THREE.CylinderGeometry(1.3, 1.27, 0.42, 160, 5, false);
+  const g = new THREE.CylinderGeometry(1.3, 1.27, 0.42, 160, 8, false);
   const pos = g.attributes.position as THREE.BufferAttribute;
   const vec = new THREE.Vector3();
   const half = 0.21;
@@ -104,8 +104,9 @@ export function makePatty(): THREE.CylinderGeometry {
         Math.sin(angle * 6) * 0.5 +
         Math.sin(angle * 11 + 1.3) * 0.32 +
         Math.sin(angle * 19) * 0.2 +
-        Math.sin(angle * 37) * 0.12;
-      const bulge = (1 - Math.abs(vec.y) / half) * 0.05; // barrel out at mid-height
+        Math.sin(angle * 37) * 0.12 +
+        Math.sin(angle * 53 + 2.1) * 0.06;
+      const bulge = (1 - Math.abs(vec.y) / half) * 0.065; // barrel out at mid-height
       const push = n * 0.05 + bulge;
       const scale = (r + push) / r;
       vec.x *= scale;
@@ -135,8 +136,11 @@ export function makeCheese(): THREE.BoxGeometry {
     const angle = Math.atan2(vec.z, vec.x);
     // droop the rim downward, more at the corners (melt)
     const droop = Math.pow(THREE.MathUtils.clamp(d, 0, 1), 2.0);
-    // localized hanging tendrils around the perimeter
-    const tendril = Math.max(0, Math.sin(angle * 6.0) - 0.55) * 2.2;
+    // localized hanging tendrils around the perimeter — two frequencies so the
+    // drips never read as a periodic pattern
+    const tendril =
+      Math.max(0, Math.sin(angle * 6.0) - 0.5) * 2.4 +
+      Math.max(0, Math.sin(angle * 11.0 + 1.7) - 0.66) * 1.6;
     if (vec.y < 0 && d > 0.6) {
       vec.y -= droop * 0.18 + tendril * droop * 0.22;
     } else if (vec.y < 0) {
@@ -170,8 +174,8 @@ export function makeTomato(): THREE.CylinderGeometry {
 }
 
 /** Lettuce — a voluminous frilly ruffled leaf ring that pokes out past the patty. */
-export function makeLettuce(): THREE.RingGeometry {
-  const g = new THREE.RingGeometry(0.5, 1.58, 220, 8);
+export function makeLettuce(inner = 0.5, outer = 1.58, seed = 0): THREE.RingGeometry {
+  const g = new THREE.RingGeometry(inner, outer, 220, 8);
   g.rotateX(-Math.PI / 2); // lay flat in the XZ plane, waves along Y
   const pos = g.attributes.position as THREE.BufferAttribute;
   const vec = new THREE.Vector3();
@@ -179,16 +183,19 @@ export function makeLettuce(): THREE.RingGeometry {
     vec.fromBufferAttribute(pos, i);
     const r = Math.hypot(vec.x, vec.z);
     const angle = Math.atan2(vec.z, vec.x);
-    const edge = THREE.MathUtils.smoothstep(r, 0.5, 1.58);
+    const edge = THREE.MathUtils.smoothstep(r, inner, outer);
     // big primary ruffle + secondary crinkle + micro noise → leafy volume
     const frill =
-      Math.sin(angle * 9) * 0.2 +
-      Math.sin(angle * 17 + 0.6) * 0.1 +
-      Math.sin(angle * 31 + 1.2) * 0.045;
-    const rise = (r - 0.5) * 0.12; // gentle bowl so leaves cup upward
-    vec.y += frill * edge + rise + (vnoise(vec.x * 6, vec.z * 6) - 0.5) * 0.07 * edge;
+      Math.sin(angle * 9 + seed) * 0.2 +
+      Math.sin(angle * 17 + 0.6 + seed * 1.7) * 0.1 +
+      Math.sin(angle * 31 + 1.2 + seed * 2.3) * 0.045;
+    const rise = (r - inner) * 0.12; // gentle bowl so leaves cup upward
+    vec.y += frill * edge + rise + (vnoise(vec.x * 6 + seed, vec.z * 6) - 0.5) * 0.07 * edge;
     // uneven, non-circular rim
-    const ripple = 1 + Math.sin(angle * 12) * 0.04 * edge + Math.sin(angle * 27) * 0.02 * edge;
+    const ripple =
+      1 +
+      Math.sin(angle * 12 + seed) * 0.04 * edge +
+      Math.sin(angle * 27 + seed * 1.3) * 0.02 * edge;
     vec.x *= ripple;
     vec.z *= ripple;
     pos.setXYZ(i, vec.x, vec.y, vec.z);
@@ -197,8 +204,13 @@ export function makeLettuce(): THREE.RingGeometry {
   return g;
 }
 
+/** Second, smaller lettuce layer that sits above the main one → frondy volume. */
+export function makeLettuceInner(): THREE.RingGeometry {
+  return makeLettuce(0.22, 1.08, 2.4);
+}
+
 /** Glossy sauce oozing around the patty seam — a thin band whose lower rim drips. */
-export function makeSauceRing(radius = 1.31, height = 0.17): THREE.CylinderGeometry {
+export function makeSauceRing(radius = 1.3, height = 0.15): THREE.CylinderGeometry {
   const g = new THREE.CylinderGeometry(radius, radius, height, 140, 5, true);
   const pos = g.attributes.position as THREE.BufferAttribute;
   const vec = new THREE.Vector3();
@@ -207,13 +219,13 @@ export function makeSauceRing(radius = 1.31, height = 0.17): THREE.CylinderGeome
     vec.fromBufferAttribute(pos, i);
     const angle = Math.atan2(vec.z, vec.x);
     const lowFactor = THREE.MathUtils.clamp((half - vec.y) / height, 0, 1); // 0 top → 1 bottom
-    // uneven, dripping lower edge
+    // uneven, dripping lower edge — short, soft blobs (long sharp spikes read fake)
     const drip =
-      Math.max(0, Math.sin(angle * 7.0) - 0.25) * 1.4 +
-      Math.max(0, Math.sin(angle * 13.0 + 2) - 0.55) * 1.1;
-    vec.y -= lowFactor * (0.03 + drip * 0.2);
+      Math.max(0, Math.sin(angle * 7.0) - 0.15) * 0.55 +
+      Math.max(0, Math.sin(angle * 13.0 + 2) - 0.5) * 0.4;
+    vec.y -= lowFactor * (0.02 + drip * 0.1);
     // wobble the radius a touch so it isn't a perfect tube
-    const wob = 1 + Math.sin(angle * 9) * 0.01;
+    const wob = 1 + Math.sin(angle * 9) * 0.008;
     vec.x *= wob;
     vec.z *= wob;
     pos.setXYZ(i, vec.x, vec.y, vec.z);

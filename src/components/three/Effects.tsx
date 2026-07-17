@@ -11,6 +11,8 @@ import {
   Vignette,
   Noise,
   SMAA,
+  HueSaturation,
+  BrightnessContrast,
 } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
 import { useUI } from '@/lib/scroll';
@@ -56,11 +58,14 @@ export default function Effects({ mobile = false }: { mobile?: boolean }) {
   return (
     <EffectComposer multisampling={0}>
       <DprSync />
-      <N8AO aoRadius={0.8} intensity={1.8} distanceFalloff={1} quality="medium" halfRes />
-      <Bloom luminanceThreshold={0.85} luminanceSmoothing={0.9} intensity={0.38} mipmapBlur />
+      <N8AO aoRadius={0.8} intensity={2.0} distanceFalloff={1} quality="high" halfRes />
+      <Bloom luminanceThreshold={0.78} luminanceSmoothing={0.9} intensity={0.5} mipmapBlur />
       <DepthOfField focusDistance={0.012} focalLength={0.05} bokehScale={2.2} />
+      {/* appetizing grade — richer reds/golds, gentle contrast snap */}
+      <HueSaturation saturation={0.08} />
+      <BrightnessContrast brightness={0} contrast={0.08} />
       <Vignette eskil={false} offset={0.28} darkness={0.62} />
-      <Noise blendFunction={BlendFunction.OVERLAY} opacity={0.035} />
+      <Noise blendFunction={BlendFunction.OVERLAY} opacity={0.045} />
       <SMAA />
     </EffectComposer>
   );

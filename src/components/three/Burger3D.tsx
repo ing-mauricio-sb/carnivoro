@@ -111,12 +111,13 @@ export default function Burger3D() {
         />
       )}
       <Suspense fallback={null}>
-        <Lighting mobile={mobile} />
+        <Lighting mobile={mobile} reduced={reduced} />
         <Burger
           spreadScale={mobile ? 0.4 : 1}
           baseScale={mobile ? 0.62 : 1}
           motionScale={reduced ? 0 : 1}
           tooltips={!mobile}
+          parallax={!mobile && !reduced}
         />
         <Smoke
           count={mobile ? 7 : 14}

@@ -11,6 +11,7 @@ import {
   makeCheese,
   makeTomato,
   makeLettuce,
+  makeLettuceInner,
   sesameSeeds,
   makeSauceRing,
   greaseDrops,
@@ -21,6 +22,11 @@ import { clamp, damp, elasticOut, smoothstep, subProgress } from '@/lib/math';
 
 const BASE_Y = -0.55;
 const REUNION_ANGLE = Math.PI * 0.5;
+/** Per-ingredient tumble rotation (rad) applied while exploded — keeps the
+ * despiece feeling like ingredients float, not like a mechanical diagram. */
+const TUMBLE = [0.45, -0.7, 0.6, -0.45, 0.75, -0.55];
+/** Toasted sesame tones, picked per instance. */
+const SEED_TONES = ['#f4e3b8', '#e0bd7f', '#c89a58'].map((c) => new THREE.Color(c));
 
 interface IngredientDef {
   key: string;
@@ -46,6 +52,7 @@ export default function Burger({
   motionScale = 1,
   baseScale = 1,
   tooltips = true,
+  parallax = false,
 }: {
   /** horizontal travel factor (smaller on mobile) */
   spreadScale?: number;
@@ -55,9 +62,14 @@ export default function Burger({
   baseScale?: number;
   /** render per-ingredient tooltips (off on narrow screens) */
   tooltips?: boolean;
+  /** subtle pointer-follow rotation during the hero phase (desktop only) */
+  parallax?: boolean;
 }) {
   const materials = useBurgerMaterials();
   const groupRef = useRef<THREE.Group>(null);
+  // outer groups carry the animated Y; inner meshes carry the tumble rotation
+  // (keeps tooltips — children of the outer group — from orbiting).
+  const layerRefs = useRef<Array<THREE.Group | null>>([]);
   const meshRefs = useRef<Array<THREE.Mesh | null>>([]);
   const tipRefs = useRef<Array<HTMLDivElement | null>>([]);
   const idle = useRef(0);
@@ -81,12 +93,13 @@ export default function Burger({
     }),
     [],
   );
+  const lettuceInnerGeo = useMemo(() => makeLettuceInner(), []);
 
   const seeds = useMemo(() => sesameSeeds(60), []);
   const sesameGeo = useMemo(() => new THREE.SphereGeometry(0.043, 12, 9), []);
 
   // sauce ooze band + grease droplets that ride on the patty
-  const sauceGeo = useMemo(() => makeSauceRing(1.31, 0.17), []);
+  const sauceGeo = useMemo(() => makeSauceRing(1.3, 0.15), []);
   const dropGeo = useMemo(() => new THREE.SphereGeometry(1, 12, 10), []);
   const greaseDroplets = useMemo(() => greaseDrops(24, 1.16, 0.22), []);
 
@@ -100,7 +113,7 @@ export default function Burger({
     topBun: materials.bun,
   };
 
-  // place sesame instances on the dome
+  // place sesame instances on the dome, tinting each a toast tone
   useLayoutEffect(() => {
     const inst = sesameRef.current;
     if (!inst) return;
@@ -119,8 +132,10 @@ export default function Burger({
       scl.set(s.scale, s.scale * 0.55, s.scale);
       m.compose(pos, q, scl);
       inst.setMatrixAt(i, m);
+      inst.setColorAt(i, SEED_TONES[(Math.random() * SEED_TONES.length) | 0]);
     });
     inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
   }, [seeds]);
 
   // place grease droplets on the patty top
@@ -146,11 +161,12 @@ export default function Burger({
   useLayoutEffect(() => {
     return () => {
       Object.values(geoms).forEach((g) => g.dispose());
+      lettuceInnerGeo.dispose();
       sesameGeo.dispose();
       sauceGeo.dispose();
       dropGeo.dispose();
     };
-  }, [geoms, sesameGeo, sauceGeo, dropGeo]);
+  }, [geoms, lettuceInnerGeo, sesameGeo, sauceGeo, dropGeo]);
 
   useFrame((state, dtRaw) => {
     const group = groupRef.current;
@@ -197,7 +213,21 @@ export default function Burger({
     const bob = p < 0.2 && motionScale > 0 ? Math.sin(t * 0.6) * 0.03 : 0;
     group.position.y = damp(group.position.y, BASE_Y + bob, 5, dt);
     const s = damp(group.scale.x, targetScale * baseScale, lambda, dt);
-    group.scale.setScalar(s);
+    // Landing squash: the reassembly elastic overshoots, so squeeze the whole
+    // burger vertically (and bulge horizontally) while it settles — juicy snap.
+    let squashY = 1;
+    let squashXZ = 1;
+    if (motionScale > 0 && p >= 0.65) {
+      const over = clamp(elasticOut(clamp((rp - 0.2) / 0.82)) - 1, -0.12, 0.3);
+      squashY = 1 - over * 0.16;
+      squashXZ = 1 + over * 0.08;
+    }
+    group.scale.set(s * squashXZ, s * squashY, s * squashXZ);
+
+    // pointer parallax, hero only (fades out before the valor slide)
+    const heroW = parallax && motionScale > 0 ? 1 - smoothstep(subProgress(p, 0.12, 0.22)) : 0;
+    const parY = state.pointer.x * 0.12 * heroW;
+    const parX = -state.pointer.y * 0.06 * heroW;
 
     // rotation — spin while whole (hero/valor), face forward to read the layers
     // during despiece (so tooltips stay put), then a deliberate 90° turn for the CTA.
@@ -205,20 +235,20 @@ export default function Burger({
     const face = Math.round(idle.current / TAU) * TAU;
     if (p < 0.4) {
       if (motionScale > 0) idle.current += dt * 0.28;
-      group.rotation.y = damp(group.rotation.y, idle.current, 6, dt);
+      group.rotation.y = damp(group.rotation.y, idle.current + parY, 6, dt);
     } else if (p < 0.66) {
       group.rotation.y = damp(group.rotation.y, face, 4, dt);
     } else {
       group.rotation.y = damp(group.rotation.y, face + REUNION_ANGLE, 3.2, dt);
     }
     group.rotation.z = damp(group.rotation.z, p >= 0.66 ? -0.12 : 0, 3, dt);
-    const tiltTarget = p >= 0.4 && p < 0.66 ? 0.16 : 0.03;
+    const tiltTarget = (p >= 0.4 && p < 0.66 ? 0.16 : 0.03) + parX;
     group.rotation.x = damp(group.rotation.x, tiltTarget, 3, dt);
 
-    // ingredients spread
+    // ingredients spread (+ slow tumble while separated → they float, naturally)
     for (let i = 0; i < INGREDIENTS.length; i++) {
-      const mesh = meshRefs.current[i];
-      if (!mesh) continue;
+      const layer = layerRefs.current[i];
+      if (!layer) continue;
       const def = INGREDIENTS[i];
       let spread: number;
       if (p < 0.4) {
@@ -232,7 +262,13 @@ export default function Burger({
       }
       const osc = motionScale > 0 ? Math.sin(t * 1.4 + i * 0.7) * 0.04 * clamp(spread) : 0;
       const targetY = THREE.MathUtils.lerp(def.assembledY, def.explodedY, spread) + osc;
-      mesh.position.y = damp(mesh.position.y, targetY, 8, dt);
+      layer.position.y = damp(layer.position.y, targetY, 8, dt);
+      const mesh = meshRefs.current[i];
+      if (mesh) {
+        mesh.rotation.y = damp(mesh.rotation.y, spread * TUMBLE[i], 3, dt);
+        const wob = motionScale > 0 ? Math.sin(t * 0.9 + i * 1.3) * 0.06 * clamp(spread) : 0;
+        mesh.rotation.x = damp(mesh.rotation.x, wob, 4, dt);
+      }
     }
 
     // tooltip visibility (fully gone before the 90° turn at 0.66)
@@ -253,33 +289,49 @@ export default function Burger({
   return (
     <group ref={groupRef} position={[0, BASE_Y, 0]} scale={1}>
       {INGREDIENTS.map((def, i) => (
-        <mesh
+        <group
           key={def.key}
           ref={(el) => {
-            meshRefs.current[i] = el;
+            layerRefs.current[i] = el;
           }}
-          geometry={geomByKey[def.key]}
-          material={matByKey[def.key]}
           position={[0, def.assembledY, 0]}
-          castShadow
-          receiveShadow
         >
-          {def.key === 'topBun' && (
-            <instancedMesh
-              ref={sesameRef}
-              args={[sesameGeo, materials.sesame, seeds.length]}
-              castShadow
-            />
-          )}
-          {def.key === 'patty' && (
-            <>
-              <mesh geometry={sauceGeo} material={materials.ketchup} position={[0, 0.19, 0]} />
+          <mesh
+            ref={(el) => {
+              meshRefs.current[i] = el;
+            }}
+            geometry={geomByKey[def.key]}
+            material={matByKey[def.key]}
+            castShadow
+            receiveShadow
+          >
+            {def.key === 'topBun' && (
               <instancedMesh
-                ref={greaseRef}
-                args={[dropGeo, materials.grease, greaseDroplets.length]}
+                ref={sesameRef}
+                args={[sesameGeo, materials.sesame, seeds.length]}
+                castShadow
               />
-            </>
-          )}
+            )}
+            {def.key === 'lettuce' && (
+              <mesh
+                geometry={lettuceInnerGeo}
+                material={materials.lettuce}
+                position={[0, 0.05, 0]}
+                rotation-y={0.55}
+                castShadow
+                receiveShadow
+              />
+            )}
+            {def.key === 'patty' && (
+              <>
+                <mesh geometry={sauceGeo} material={materials.ketchup} position={[0, 0.19, 0]} />
+                <instancedMesh
+                  ref={greaseRef}
+                  args={[dropGeo, materials.grease, greaseDroplets.length]}
+                />
+              </>
+            )}
+          </mesh>
           {tooltips && tipsActive && (
             <Html
               position={[def.side * 2.2, 0, 0.15]}
@@ -302,7 +354,7 @@ export default function Burger({
               </div>
             </Html>
           )}
-        </mesh>
+        </group>
       ))}
     </group>
   );

@@ -527,11 +527,11 @@ export function makeLettuceAlbedo(size = 1024): THREE.CanvasTexture {
     }
   }
 
-  const heart = { r: 150, g: 205, b: 96 }; // pale crunchy heart
-  const mid = { r: 96, g: 166, b: 64 }; // leaf green
-  const edge = { r: 54, g: 118, b: 42 }; // deep outer green
-  const vein = { r: 196, g: 228, b: 148 }; // pale veins
-  const blight = { r: 196, g: 205, b: 110 }; // yellow touches
+  const heart = { r: 138, g: 192, b: 86 }; // pale crunchy heart
+  const mid = { r: 82, g: 148, b: 54 }; // leaf green
+  const edge = { r: 44, g: 102, b: 36 }; // deep outer green
+  const vein = { r: 190, g: 224, b: 140 }; // pale veins
+  const blight = { r: 178, g: 190, b: 96 }; // yellow touches
 
   for (let y = 0; y < size; y++) {
     const ny = y / size - 0.5;
@@ -558,11 +558,13 @@ export function makeLettuceAlbedo(size = 1024): THREE.CanvasTexture {
       r *= 1 + bl;
       g *= 1 + bl;
       b *= 1 + bl;
-      // primary veins: curved radial lines, strongest mid-leaf
+      // primary veins: curved radial lines, visible across most of the leaf
       const curve = ang + rad * 0.9;
-      const prim = Math.pow(Math.abs(Math.sin(curve * 10)), 0.55);
-      const veinMask = (1 - THREE.MathUtils.smoothstep(rad, 0.7, 1.05)) * THREE.MathUtils.smoothstep(rad, 0.02, 0.12);
-      const vw = (1 - prim) * 0.4 * veinMask;
+      const prim = Math.pow(Math.abs(Math.sin(curve * 10)), 0.5);
+      const veinMask =
+        (1 - THREE.MathUtils.smoothstep(rad, 0.88, 1.15)) *
+        THREE.MathUtils.smoothstep(rad, 0.02, 0.12);
+      const vw = (1 - prim) * 0.55 * veinMask;
       r = THREE.MathUtils.lerp(r, vein.r, vw);
       g = THREE.MathUtils.lerp(g, vein.g, vw);
       b = THREE.MathUtils.lerp(b, vein.b, vw);
