@@ -1,7 +1,7 @@
 'use client';
 
 import { Component, Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PerformanceMonitor, Preload, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
 import Burger from './Burger';
@@ -46,6 +46,36 @@ function FrameloopGate() {
       invalidate();
     }
   }, [covered, ready, setFrameloop, invalidate, clock]);
+  return null;
+}
+
+/** Dev-only: exposes renderer stats (window.__perf) for the QA scripts.
+ * autoReset off so counters accumulate across every internal pass (shadows,
+ * transmission, composer); the interval divides by frames for a per-frame avg. */
+function PerfProbe() {
+  const gl = useThree((s) => s.gl);
+  const frames = useRef(0);
+  useEffect(() => {
+    gl.info.autoReset = false;
+    const id = setInterval(() => {
+      const f = Math.max(frames.current, 1);
+      (window as { __perf?: object }).__perf = {
+        calls: Math.round(gl.info.render.calls / f),
+        triangles: Math.round(gl.info.render.triangles / f),
+        fps: frames.current,
+        dpr: gl.getPixelRatio(),
+      };
+      frames.current = 0;
+      gl.info.reset();
+    }, 1000);
+    return () => {
+      clearInterval(id);
+      gl.info.autoReset = true;
+    };
+  }, [gl]);
+  useFrame(() => {
+    frames.current += 1;
+  });
   return null;
 }
 
@@ -98,6 +128,7 @@ export default function Burger3D() {
       }}
     >
       <FrameloopGate />
+      {process.env.NODE_ENV !== 'production' && <PerfProbe />}
       {/* Unmounted while frozen: a paused loop would otherwise feed it
           poisoned ~0fps samples on resume. */}
       {!covered && (

@@ -4,19 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
-import {
-  makeBottomBun,
-  makeTopBun,
-  makePatty,
-  makeCheese,
-  makeTomato,
-  makeLettuce,
-  makeLettuceInner,
-  sesameSeeds,
-  makeSauceRing,
-  greaseDrops,
-} from './geometry';
-import { useBurgerMaterials } from './materials';
+import { buildBurgerRig, STRATA, type StratumKey } from './model/burgerRig';
 import { scroll, useUI } from '@/lib/scroll';
 import { clamp, damp, elasticOut, smoothstep, subProgress } from '@/lib/math';
 
@@ -24,28 +12,26 @@ const BASE_Y = -0.55;
 const REUNION_ANGLE = Math.PI * 0.5;
 /** Per-ingredient tumble rotation (rad) applied while exploded — keeps the
  * despiece feeling like ingredients float, not like a mechanical diagram. */
-const TUMBLE = [0.45, -0.7, 0.6, -0.45, 0.75, -0.55];
-/** Toasted sesame tones, picked per instance. */
-const SEED_TONES = ['#f4e3b8', '#e0bd7f', '#c89a58'].map((c) => new THREE.Color(c));
+const TUMBLE = [0.45, -0.7, 0.6, -0.5, 0.7, -0.45, 0.55, -0.6];
 
-interface IngredientDef {
-  key: string;
-  assembledY: number;
-  explodedY: number;
+interface IngredientCopy {
   side: 1 | -1; // tooltip anchor side
   label: string;
   text: string;
 }
 
-// bottom → top. assembledY values stack snugly; explodedY spreads them apart.
-const INGREDIENTS: IngredientDef[] = [
-  { key: 'bottomBun', assembledY: 0.0, explodedY: -1.15, side: -1, label: 'BASE BRIOCHE', text: 'Aguanta todo el jugo sin rendirse.' },
-  { key: 'patty', assembledY: 0.36, explodedY: -0.45, side: 1, label: '100% PURA CARNE', text: 'Blend de res sellado a la parrilla. Jugoso.' },
-  { key: 'cheese', assembledY: 0.55, explodedY: 0.1, side: -1, label: 'QUESO EDAM', text: 'Fundido al momento sobre la carne.' },
-  { key: 'tomato', assembledY: 0.66, explodedY: 0.6, side: 1, label: 'TOMATE', text: 'En rodajas, siempre fresco.' },
-  { key: 'lettuce', assembledY: 0.78, explodedY: 1.12, side: -1, label: 'LECHUGA', text: 'Fresca y crocante, del mercado.' },
-  { key: 'topBun', assembledY: 0.9, explodedY: 1.75, side: 1, label: 'PAN BRIOCHE', text: 'Horneado del día, con ajonjolí.' },
-];
+/* TODO(Mauri): copy de marca por ingrediente — ajusta labels/textos a la carta
+ * real de Carnívoro. El orden es el del stack (abajo → arriba). */
+const COPY: Record<StratumKey, IngredientCopy> = {
+  bottomBun: { side: -1, label: 'BASE CON AJONJOLÍ', text: 'Horneada del día, tostada a la plancha.' },
+  lettuce: { side: 1, label: 'LECHUGA FRESCA', text: 'Crocante, del mercado.' },
+  tomato: { side: -1, label: 'TOMATE', text: 'Dos rodajas, siempre frescas.' },
+  onion: { side: 1, label: 'CEBOLLA MORADA', text: 'En aros, con su toque dulce.' },
+  pickles: { side: -1, label: 'PEPINILLOS', text: 'Crocantes, en corte crinkle.' },
+  patty: { side: 1, label: '100% PURA CARNE', text: 'Blend de res sellado a la parrilla. Jugoso.' },
+  cheese: { side: -1, label: 'QUESO CHEDDAR', text: 'Fundido al momento sobre la carne.' },
+  topBun: { side: 1, label: 'PAN ARTESANAL', text: 'Con ajonjolí y brillo de mantequilla.' },
+};
 
 export default function Burger({
   spreadScale = 1,
@@ -65,108 +51,29 @@ export default function Burger({
   /** subtle pointer-follow rotation during the hero phase (desktop only) */
   parallax?: boolean;
 }) {
-  const materials = useBurgerMaterials();
   const groupRef = useRef<THREE.Group>(null);
-  // outer groups carry the animated Y; inner meshes carry the tumble rotation
-  // (keeps tooltips — children of the outer group — from orbiting).
-  const layerRefs = useRef<Array<THREE.Group | null>>([]);
-  const meshRefs = useRef<Array<THREE.Mesh | null>>([]);
   const tipRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const tipAnchorRefs = useRef<Array<THREE.Group | null>>([]);
   const idle = useRef(0);
   const readySet = useRef(false);
-  const sesameRef = useRef<THREE.InstancedMesh>(null);
-  const greaseRef = useRef<THREE.InstancedMesh>(null);
   // Tooltips only exist visually inside the despiece window (fade 0.42–0.64).
   // Mounting the <Html> nodes just around it stops drei from projecting and
-  // writing 6 DOM transforms per frame during the entire rest of the scroll.
+  // writing 8 DOM transforms per frame during the entire rest of the scroll.
   const [tipsActive, setTipsActive] = useState(false);
   const tipsActiveRef = useRef(false);
 
-  const geoms = useMemo(
-    () => ({
-      bottomBun: makeBottomBun(),
-      patty: makePatty(),
-      cheese: makeCheese(),
-      tomato: makeTomato(),
-      lettuce: makeLettuce(),
-      topBun: makeTopBun(),
-    }),
-    [],
+  // img2threejs factory model + per-stratum pivots (see model/burgerRig.ts).
+  const rig = useMemo(() => buildBurgerRig({ mobile: baseScale < 1 }), [baseScale]);
+  // Tumble composes on top of each node's as-built rotation (onion/cheese carry
+  // a baked X-rotation that lays them flat — never overwrite it).
+  const baseRot = useMemo(
+    () => rig.layers.map((l) => ({ x: l.node.rotation.x, y: l.node.rotation.y })),
+    [rig],
   );
-  const lettuceInnerGeo = useMemo(() => makeLettuceInner(), []);
 
-  const seeds = useMemo(() => sesameSeeds(60), []);
-  const sesameGeo = useMemo(() => new THREE.SphereGeometry(0.043, 12, 9), []);
-
-  // sauce ooze band + grease droplets that ride on the patty
-  const sauceGeo = useMemo(() => makeSauceRing(1.3, 0.15), []);
-  const dropGeo = useMemo(() => new THREE.SphereGeometry(1, 12, 10), []);
-  const greaseDroplets = useMemo(() => greaseDrops(24, 1.16, 0.22), []);
-
-  const geomByKey = geoms as Record<string, THREE.BufferGeometry>;
-  const matByKey: Record<string, THREE.Material> = {
-    bottomBun: materials.bun,
-    patty: materials.patty,
-    cheese: materials.cheese,
-    tomato: materials.tomato,
-    lettuce: materials.lettuce,
-    topBun: materials.bun,
-  };
-
-  // place sesame instances on the dome, tinting each a toast tone
   useLayoutEffect(() => {
-    const inst = sesameRef.current;
-    if (!inst) return;
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const up = new THREE.Vector3(0, 1, 0);
-    const pos = new THREE.Vector3();
-    const nrm = new THREE.Vector3();
-    const scl = new THREE.Vector3();
-    seeds.forEach((s, i) => {
-      pos.set(...s.position);
-      nrm.set(...s.normal);
-      q.setFromUnitVectors(up, nrm);
-      const zrot = new THREE.Quaternion().setFromAxisAngle(nrm, s.rotation);
-      q.premultiply(zrot);
-      scl.set(s.scale, s.scale * 0.55, s.scale);
-      m.compose(pos, q, scl);
-      inst.setMatrixAt(i, m);
-      inst.setColorAt(i, SEED_TONES[(Math.random() * SEED_TONES.length) | 0]);
-    });
-    inst.instanceMatrix.needsUpdate = true;
-    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-  }, [seeds]);
-
-  // place grease droplets on the patty top
-  useLayoutEffect(() => {
-    const inst = greaseRef.current;
-    if (!inst) return;
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const yAxis = new THREE.Vector3(0, 1, 0);
-    const p = new THREE.Vector3();
-    const s = new THREE.Vector3();
-    greaseDroplets.forEach((it, i) => {
-      p.set(...it.position);
-      q.setFromAxisAngle(yAxis, it.rotation);
-      s.set(it.scale, it.scale * 0.5, it.scale);
-      m.compose(p, q, s);
-      inst.setMatrixAt(i, m);
-    });
-    inst.instanceMatrix.needsUpdate = true;
-  }, [greaseDroplets]);
-
-  // dispose geometries on unmount
-  useLayoutEffect(() => {
-    return () => {
-      Object.values(geoms).forEach((g) => g.dispose());
-      lettuceInnerGeo.dispose();
-      sesameGeo.dispose();
-      sauceGeo.dispose();
-      dropGeo.dispose();
-    };
-  }, [geoms, lettuceInnerGeo, sesameGeo, sauceGeo, dropGeo]);
+    return () => rig.dispose();
+  }, [rig]);
 
   useFrame((state, dtRaw) => {
     const group = groupRef.current;
@@ -246,29 +153,34 @@ export default function Burger({
     group.rotation.x = damp(group.rotation.x, tiltTarget, 3, dt);
 
     // ingredients spread (+ slow tumble while separated → they float, naturally)
-    for (let i = 0; i < INGREDIENTS.length; i++) {
-      const layer = layerRefs.current[i];
-      if (!layer) continue;
-      const def = INGREDIENTS[i];
+    const n = rig.layers.length;
+    for (let i = 0; i < n; i++) {
+      const layer = rig.layers[i];
       let spread: number;
       if (p < 0.4) {
         spread = 0;
       } else if (p < 0.65) {
-        const local = clamp((dp - i * 0.05) / 0.75);
+        const local = clamp((dp - i * 0.04) / 0.72);
         spread = smoothstep(local);
       } else {
-        const local = clamp((rp - (5 - i) * 0.04) / 0.82);
+        const local = clamp((rp - (n - 1 - i) * 0.04) / 0.82);
         spread = 1 - elasticOut(local);
       }
       const osc = motionScale > 0 ? Math.sin(t * 1.4 + i * 0.7) * 0.04 * clamp(spread) : 0;
-      const targetY = THREE.MathUtils.lerp(def.assembledY, def.explodedY, spread) + osc;
-      layer.position.y = damp(layer.position.y, targetY, 8, dt);
-      const mesh = meshRefs.current[i];
-      if (mesh) {
-        mesh.rotation.y = damp(mesh.rotation.y, spread * TUMBLE[i], 3, dt);
-        const wob = motionScale > 0 ? Math.sin(t * 0.9 + i * 1.3) * 0.06 * clamp(spread) : 0;
-        mesh.rotation.x = damp(mesh.rotation.x, wob, 4, dt);
-      }
+      const targetY = THREE.MathUtils.lerp(layer.assembledY, layer.explodedY, spread) + osc;
+      layer.node.position.y = damp(layer.node.position.y, targetY, 8, dt);
+      layer.node.rotation.y = damp(
+        layer.node.rotation.y,
+        baseRot[i].y + spread * TUMBLE[i],
+        3,
+        dt,
+      );
+      const wob = motionScale > 0 ? Math.sin(t * 0.9 + i * 1.3) * 0.06 * clamp(spread) : 0;
+      layer.node.rotation.x = damp(layer.node.rotation.x, baseRot[i].x + wob, 4, dt);
+      // tooltip anchors ride their stratum (siblings of the imperative model,
+      // so tumble never orbits the DOM label)
+      const anchor = tipAnchorRefs.current[i];
+      if (anchor) anchor.position.y = layer.node.position.y;
     }
 
     // tooltip visibility (fully gone before the 90° turn at 0.66)
@@ -278,7 +190,7 @@ export default function Burger({
     for (let i = 0; i < tipRefs.current.length; i++) {
       const el = tipRefs.current[i];
       if (!el) continue;
-      const reveal = clamp((dp - i * 0.05) / 0.4);
+      const reveal = clamp((dp - i * 0.04) / 0.4);
       const o = baseVis * smoothstep(reveal);
       el.style.opacity = String(o);
       el.style.transform = `translateY(${(1 - o) * 8}px)`;
@@ -288,74 +200,42 @@ export default function Burger({
 
   return (
     <group ref={groupRef} position={[0, BASE_Y, 0]} scale={1}>
-      {INGREDIENTS.map((def, i) => (
-        <group
-          key={def.key}
-          ref={(el) => {
-            layerRefs.current[i] = el;
-          }}
-          position={[0, def.assembledY, 0]}
-        >
-          <mesh
-            ref={(el) => {
-              meshRefs.current[i] = el;
-            }}
-            geometry={geomByKey[def.key]}
-            material={matByKey[def.key]}
-            castShadow
-            receiveShadow
-          >
-            {def.key === 'topBun' && (
-              <instancedMesh
-                ref={sesameRef}
-                args={[sesameGeo, materials.sesame, seeds.length]}
-                castShadow
-              />
-            )}
-            {def.key === 'lettuce' && (
-              <mesh
-                geometry={lettuceInnerGeo}
-                material={materials.lettuce}
-                position={[0, 0.05, 0]}
-                rotation-y={0.55}
-                castShadow
-                receiveShadow
-              />
-            )}
-            {def.key === 'patty' && (
-              <>
-                <mesh geometry={sauceGeo} material={materials.ketchup} position={[0, 0.19, 0]} />
-                <instancedMesh
-                  ref={greaseRef}
-                  args={[dropGeo, materials.grease, greaseDroplets.length]}
-                />
-              </>
-            )}
-          </mesh>
-          {tooltips && tipsActive && (
-            <Html
-              position={[def.side * 2.2, 0, 0.15]}
-              center
-              distanceFactor={undefined}
-              zIndexRange={[40, 30]}
-              style={{ pointerEvents: 'none' }}
+      <primitive object={rig.model} />
+      {tooltips &&
+        tipsActive &&
+        rig.layers.map((layer, i) => {
+          const copy = COPY[layer.key];
+          return (
+            <group
+              key={layer.key}
+              ref={(el) => {
+                tipAnchorRefs.current[i] = el;
+              }}
+              position={[0, layer.assembledY, 0]}
             >
-              <div
-                ref={(el) => {
-                  tipRefs.current[i] = el;
-                }}
-                style={{ opacity: 0 }}
-                className={`w-max max-w-[15rem] select-none rounded-xl border border-surface2 bg-surface/85 px-4 py-2 backdrop-blur-md ${
-                  def.side === 1 ? 'text-left' : 'text-right'
-                }`}
+              <Html
+                position={[copy.side * 2.2, 0, 0.15]}
+                center
+                distanceFactor={undefined}
+                zIndexRange={[40, 30]}
+                style={{ pointerEvents: 'none' }}
               >
-                <p className="eyebrow mb-0.5">{def.label}</p>
-                <p className="text-sm leading-snug text-bone">{def.text}</p>
-              </div>
-            </Html>
-          )}
-        </group>
-      ))}
+                <div
+                  ref={(el) => {
+                    tipRefs.current[i] = el;
+                  }}
+                  style={{ opacity: 0 }}
+                  className={`w-max max-w-[15rem] select-none rounded-xl border border-surface2 bg-surface/85 px-4 py-2 backdrop-blur-md ${
+                    copy.side === 1 ? 'text-left' : 'text-right'
+                  }`}
+                >
+                  <p className="eyebrow mb-0.5">{copy.label}</p>
+                  <p className="text-sm leading-snug text-bone">{copy.text}</p>
+                </div>
+              </Html>
+            </group>
+          );
+        })}
     </group>
   );
 }
@@ -368,3 +248,6 @@ function snapProgress(p: number): number {
   if (p < 0.85) return 0.75;
   return 0.92;
 }
+
+export type { StratumKey };
+export { STRATA };

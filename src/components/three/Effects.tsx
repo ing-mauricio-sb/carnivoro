@@ -7,7 +7,6 @@ import {
   EffectComposerContext,
   N8AO,
   Bloom,
-  DepthOfField,
   Vignette,
   Noise,
   SMAA,
@@ -60,7 +59,10 @@ export default function Effects({ mobile = false }: { mobile?: boolean }) {
       <DprSync />
       <N8AO aoRadius={0.8} intensity={2.0} distanceFalloff={1} quality="high" halfRes />
       <Bloom luminanceThreshold={0.78} luminanceSmoothing={0.9} intensity={0.5} mipmapBlur />
-      <DepthOfField focusDistance={0.012} focalLength={0.05} bokehScale={2.2} />
+      {/* DepthOfField removed: its legacy normalized values put the focus plane
+          1.2cm from the camera under postprocessing v6's world units, blurring
+          the entire burger (~7 units away) — and a single fixed-depth subject
+          gains nothing from a bokeh pass. */}
       {/* appetizing grade — richer reds/golds, gentle contrast snap */}
       <HueSaturation saturation={0.08} />
       <BrightnessContrast brightness={0} contrast={0.08} />
