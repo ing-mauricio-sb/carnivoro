@@ -92,7 +92,11 @@ export default function Lighting({
         blur={mobile ? 3.2 : 2.8}
         opacity={mobile ? 0.5 : 0.62}
         far={5}
-        resolution={mobile ? 512 : 1024}
+        resolution={512}
+        // mobile: one static bake (the despiece silhouette shift is invisible at
+        // phone size); desktop: dynamic but at half the previous target size —
+        // the default is an unbounded every-frame re-render at 1024².
+        frames={mobile ? 1 : Infinity}
         color="#000000"
       />
     </>

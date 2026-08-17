@@ -29,6 +29,11 @@ next-env.d.ts
 
 # local tooling
 /.claude/
+/.img2threejs/
+/.playwright-mcp/
+
+# 3D reference photo (pipeline input, not a site asset)
+/hamburguesa.jpg
 .vscode/
 .idea/
 
